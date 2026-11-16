@@ -52,3 +52,24 @@ describe("flags", () => {
     expect(ruleFlags("Hi, a reminder that your repayment of N12,000 is due on Friday. Thank you.")).toEqual([]);
   });
 });
+
+import { plainText, lenderLine } from "../src/text";
+describe("draft text", () => {
+  it("strips markdown the cloud model adds", () => {
+    const md = "## subject: complaint\n\n**lender:** quickcash ng\n* item one\n*note* and `code`";
+    const out = plainText(md);
+    expect(out).not.toMatch(/\*|#|`/);
+    expect(out).toContain("subject: complaint");
+    expect(out).toContain("lender: quickcash ng");
+    expect(out).toContain("- item one");
+  });
+  it("never leaves a lender placeholder", () => {
+    expect(plainText("[lender name] (quickcash ng) called my sister")).toBe("quickcash ng called my sister");
+    expect(plainText("i borrowed from [lender name].")).toBe("i borrowed from the lender.");
+  });
+  it("leaves the lender line out when we don't know the lender", () => {
+    expect(lenderLine()).toBeNull();
+    expect(lenderLine("  ")).toBeNull();
+    expect(lenderLine("quickcash ng")).toBe("lender: quickcash ng");
+  });
+});

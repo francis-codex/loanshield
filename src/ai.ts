@@ -155,6 +155,7 @@ export async function draftComplaint(redactedFacts: string): Promise<Result<stri
   const prompt = `write a short, firm complaint to the federal competition and consumer protection commission (fccpc), nigeria, from a borrower about a digital lender's conduct.
 use only the facts below. do not invent names, dates, amounts or laws. keep placeholders like [name] exactly as written.
 structure: subject line; who the lender is; what happened (dated list if dates exist); the quoted evidence; what the borrower asks fccpc to do (investigate, stop the harassment, review the lender's approval). plain english, under 350 words.
+plain text only: no markdown, no asterisks, no # headings, no bold. if the facts name no lender, call it "the lender" and never write a placeholder like [lender name].
 
 facts:
 ${redactedFacts}`;
