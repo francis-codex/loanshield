@@ -118,7 +118,7 @@ a{color:var(--acc)}
 .badge.cloud{background:var(--warn-bg);color:var(--warn)}
 
 /* states */
-.note{display:flex;gap:10px;background:var(--warn-bg);border-radius:var(--r-sm);padding:12px 14px;margin:0 0 14px;font-size:14px}
+.note{display:flex;gap:10px;background:var(--sunk);color:var(--mut);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 12px;margin:0 0 14px;font-size:13px;line-height:1.45}
 .note .link{white-space:nowrap}
 .empty{text-align:center;color:var(--faint);font-size:14px;padding:18px 8px}
 .spin{display:flex;align-items:center;gap:12px;color:var(--mut);padding:18px 16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);margin:12px 0}

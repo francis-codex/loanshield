@@ -109,7 +109,7 @@ async function checkDevice() {
   const s = await deviceStatus(true), box = $("#device");
   if (s === "available") { box.hidden = true; return; }
   box.hidden = false;
-  if (s === "unavailable") box.innerHTML = `<span>on-device ai isn't in this browser. use chrome on a supported android phone or desktop. you can still type offer terms and paste messages; our word checks still run on your phone.</span>`;
+  if (s === "unavailable") box.innerHTML = `<span>on-device reading needs chrome on a computer. here you can type the terms, paste messages, or let the cloud read an offer screenshot.</span>`;
   else { box.innerHTML = `<span>the on-device model needs a one-time download. <span id="dlp"></span></span><button id="dl" class="link">download</button>`;
     $("#dl").onclick = async () => { $("#dlp").textContent = "starting…"; try { await prepareDevice(f => $("#dlp").textContent = Math.round(f * 100) + "%"); box.hidden = true; } catch (e) { $("#dlp").textContent = String(e); } }; }
 }
