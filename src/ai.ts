@@ -9,19 +9,18 @@ import { getAI, getGenerativeModel, GoogleAIBackend, InferenceMode, Schema, type
 export type Source = "on_device" | "in_cloud";
 export interface Result<T> { data: T; source: Source }
 
-const env = import.meta.env;
-const config = env.VITE_FIREBASE_API_KEY ? {
-  apiKey: env.VITE_FIREBASE_API_KEY, authDomain: env.VITE_FIREBASE_AUTH_DOMAIN, projectId: env.VITE_FIREBASE_PROJECT_ID,
-  appId: env.VITE_FIREBASE_APP_ID, storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET, messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+const config = import.meta.env.VITE_FIREBASE_API_KEY ? {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY, authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID, storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
 } : null;
-const CLOUD_MODEL = env.VITE_CLOUD_MODEL || "gemini-2.5-flash";
+const CLOUD_MODEL = import.meta.env.VITE_CLOUD_MODEL || "gemini-2.5-flash";
 
 let app: FirebaseApp | null = null, ai: AI | null = null;
 if (config) {
   app = initializeApp(config);
-  if (env.VITE_RECAPTCHA_ENTERPRISE_KEY) {
-    if (env.DEV && env.VITE_APPCHECK_DEBUG) (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = env.VITE_APPCHECK_DEBUG;
-    initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(env.VITE_RECAPTCHA_ENTERPRISE_KEY), isTokenAutoRefreshEnabled: true });
+  if (import.meta.env.VITE_RECAPTCHA_ENTERPRISE_KEY) {
+    if (import.meta.env.DEV && import.meta.env.VITE_APPCHECK_DEBUG) (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = import.meta.env.VITE_APPCHECK_DEBUG;
+    initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(import.meta.env.VITE_RECAPTCHA_ENTERPRISE_KEY), isTokenAutoRefreshEnabled: true });
   }
   ai = getAI(app, { backend: new GoogleAIBackend() });
 }
