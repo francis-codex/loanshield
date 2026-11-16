@@ -13,7 +13,7 @@ const config = import.meta.env.VITE_FIREBASE_API_KEY ? {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY, authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID, storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
 } : null;
-const CLOUD_MODEL = import.meta.env.VITE_CLOUD_MODEL || "gemini-2.5-flash";
+const CLOUD_MODEL = import.meta.env.VITE_CLOUD_MODEL || "gemini-3.5-flash";
 
 let app: FirebaseApp | null = null, ai: AI | null = null;
 if (config) {
@@ -127,7 +127,12 @@ async function hybrid<T>(prompt: string, image: Blob | null, json: object, cloud
   });
   const parts: (string | Part)[] = [prompt];
   if (image) parts.push(await toPart(image));
-  const r = await withTimeout(model.generateContent(parts));
+  // the cloud model sometimes answers 500/503 under load: one short retry before giving up.
+  const r = await withTimeout(model.generateContent(parts)).catch(async (e) => {
+    if (mode === "device_only" || !/\[(500|503)/.test(String(e?.message))) throw e;
+    await new Promise((res) => setTimeout(res, 3000));
+    return withTimeout(model.generateContent(parts));
+  });
   const text = r.response.text();
   return { data: cloudSchema || json ? parse<T>(text) : (text as T), source: (r.response.inferenceSource as Source) || (mode === "cloud_only" ? "in_cloud" : "on_device") };
 }
