@@ -32,7 +32,7 @@ $("#app").innerHTML = `
   <details><summary>or type the terms</summary>
     <div class="grid">
       <label>lender / app<input id="t_app"></label>
-      <label>you get (₦)<input id="t_p" inputmode="decimal"></label>
+      <label>loan amount (₦)<input id="t_p" inputmode="decimal"></label>
       <label>you repay (₦)<input id="t_r" inputmode="decimal"></label>
       <label>upfront fee (₦)<input id="t_f" inputmode="decimal"></label>
       <label>days<input id="t_d" inputmode="numeric"></label>
@@ -113,7 +113,7 @@ function offerHtml(o: Offer, src?: Source) {
       <div class="big">${pct(c.apr)} <span>a year</span></div>
       <div class="lines"><div>you get <b>${naira(c.disbursed)}</b></div><div>you repay <b>${naira(c.repay)}</b> in ${c.tenorDays} days</div><div>cost of the loan <b>${naira(c.costOfCredit)}</b> (${pct(c.periodRate)} for ${c.tenorDays} days)</div></div>
       <div class="verdict">${lv === "severe" ? "very expensive. this costs more than double a year." : lv === "high" ? "expensive. look for a cheaper option." : "within our yardstick."}</div></div>`;
-  } else h += `<div class="card">need ${miss.map(m => ({ principal: "the amount you get", repayment: "the amount you repay", tenorDays: "the number of days" }[m])).join(", ")} to work out the real cost. type them below.</div>`;
+  } else h += `<div class="card">need ${miss.map(m => ({ principal: "the loan amount", repayment: "the amount you repay", tenorDays: "the number of days" }[m])).join(", ")} to work out the real cost. type them below.</div>`;
   if (o.otherCharges?.length) h += `<div class="card warn"><b>other charges:</b><ul>${o.otherCharges.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
   const risky = (o.permissions || []).filter(p => /contact|sms|gallery|photo|call log/i.test(p));
   if (risky.length) h += `<div class="card bad">this app asks for <b>${risky.map(esc).join(", ")}</b>. fccpc rules ban lenders from using your contacts or photos to recover debt.</div>`;
@@ -153,11 +153,13 @@ $("#msgGo").onclick = async () => {
   let flags = text ? ruleFlags(text) : [], src: Source | null = null, read = text, sender = "";
   try {
     const r = await readMessage(msgFile, text);
-    src = r.source; read = r.data.text || text; sender = r.data.sender || "";
+    src = r.source; sender = r.data.sender || "";
     const model = (r.data.flags || []).filter(f => f.kind in FLAG_LABEL).map(f => ({ kind: f.kind as FlagKind, quote: f.quote, source: "model" as const }));
+    read = r.data.text || text || model.map(f => `"${f.quote}"`).join("\n");
     flags = merge(model, ruleFlags(read));
   } catch (e) {
-    if (!text) { out.innerHTML = `<div class="card warn">on-device ai isn't ready here, so we can't read screenshots yet. paste the message text instead.</div>`; return; }
+    const slow = /too long/.test(String((e as Error)?.message));
+    if (!text) { out.innerHTML = `<div class="card warn">${slow ? (e as Error).message : "on-device ai isn't ready here, so we can't read screenshots yet. paste the message text instead."}</div>`; return; }
   }
   if (read) evidence.messages.push(read);
   if (sender && !evidence.lender) evidence.lender = sender;

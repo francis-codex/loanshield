@@ -65,10 +65,9 @@ const msgJson = {
   type: "object",
   properties: {
     sender: { type: "string" }, amountDemanded: { type: "number" },
-    flags: { type: "array", items: { type: "object", properties: { kind: { type: "string", enum: FLAG_KINDS }, quote: { type: "string" } }, required: ["kind", "quote"] } },
-    text: { type: "string" },
+    flags: { type: "array", maxItems: 8, items: { type: "object", properties: { kind: { type: "string", enum: FLAG_KINDS }, quote: { type: "string", maxLength: 200 } }, required: ["kind", "quote"] } },
   },
-  required: ["flags", "text"],
+  required: ["flags"],
 };
 
 const OFFER_PROMPT = `you read a screenshot of a nigerian loan app offer. extract only numbers that are printed on the screen.
@@ -78,9 +77,8 @@ const OFFER_PROMPT = `you read a screenshot of a nigerian loan app offer. extrac
 - otherCharges: any penalties, late fees or rollover charges, quoted. permissions: any phone permissions requested (contacts, sms, gallery, location).
 if a value is not visible, leave it out. never guess or calculate. return json only.`;
 const MSG_PROMPT = `you read a message a borrower received from a nigerian loan app or debt collector (screenshot or pasted text).
-1. text: transcribe the message text exactly.
-2. sender: the app or company name if stated. amountDemanded: naira amount demanded, if stated.
-3. flags: for each problem, give kind and the exact quote from the message:
+1. sender: the app or company name if stated. amountDemanded: naira amount demanded, if stated.
+2. flags: for each problem, at most once per kind, give kind and the exact quote from the message:
 - contacts: threatens to contact, or has contacted, the borrower's family, friends, employer or phone contacts
 - shaming: calls the borrower a thief, fraudster or criminal, or threatens to publish their photo or name
 - threat: intimidation or threats of harm
@@ -99,37 +97,54 @@ async function toPart(file: Blob): Promise<Part> {
 }
 
 /** straight chrome prompt api, used when no firebase project is configured (local dev) */
+const TIMEOUT_MS = 90_000;
+const tooSlow = () => new Error("this took too long on your phone. try again, or paste the text instead.");
+/** never leave the user on a spinner: give up after TIMEOUT_MS. */
+function withTimeout<T>(p: Promise<T>, onTimeout?: () => void): Promise<T> {
+  let t: ReturnType<typeof setTimeout>;
+  return Promise.race([p, new Promise<T>((_, rej) => { t = setTimeout(() => { rej(tooSlow()); onTimeout?.(); }, TIMEOUT_MS); })]).finally(() => clearTimeout(t));
+}
+
 async function chromePrompt(prompt: string, image: Blob | null, schema: object): Promise<string> {
-  const s = await LanguageModel.create(image ? IMG_IN : TXT_IN);
+  const ac = new AbortController();
+  const s: any = await withTimeout<any>(LanguageModel.create({ ...(image ? IMG_IN : TXT_IN), signal: ac.signal }), () => ac.abort());
   try {
     const content: any[] = [{ type: "text", value: prompt }];
     if (image) content.push({ type: "image", value: image });
-    return await s.prompt([{ role: "user", content }], { responseConstraint: schema });
+    return await withTimeout(s.prompt([{ role: "user", content }], { ...(schema ? { responseConstraint: schema } : {}), signal: ac.signal }), () => ac.abort());
   } finally { s.destroy?.(); }
 }
 
 async function hybrid<T>(prompt: string, image: Blob | null, json: object, cloudSchema: any, mode: "device_only" | "prefer_device" | "cloud_only"): Promise<Result<T>> {
   if (!ai) {
     if (mode === "cloud_only") throw new Error("cloud is not set up in this build");
-    return { data: parse<T>(await chromePrompt(prompt, image, json)), source: "on_device" };
+    const raw = await chromePrompt(prompt, image, json);
+    return { data: json ? parse<T>(raw) : (raw as T), source: "on_device" };
   }
   const model = getGenerativeModel(ai, {
     mode: mode === "device_only" ? InferenceMode.ONLY_ON_DEVICE : mode === "cloud_only" ? InferenceMode.ONLY_IN_CLOUD : InferenceMode.PREFER_ON_DEVICE,
-    onDeviceParams: { createOptions: (image ? IMG_IN : TXT_IN) as any, promptOptions: { responseConstraint: json } },
+    onDeviceParams: { createOptions: (image ? IMG_IN : TXT_IN) as any, promptOptions: json ? { responseConstraint: json } : {} },
     inCloudParams: { model: CLOUD_MODEL, generationConfig: cloudSchema ? { responseMimeType: "application/json", responseSchema: cloudSchema } : undefined },
   });
   const parts: (string | Part)[] = [prompt];
   if (image) parts.push(await toPart(image));
-  const r = await model.generateContent(parts);
+  const r = await withTimeout(model.generateContent(parts));
   const text = r.response.text();
   return { data: cloudSchema || json ? parse<T>(text) : (text as T), source: (r.response.inferenceSource as Source) || (mode === "cloud_only" ? "in_cloud" : "on_device") };
 }
 
 export interface Offer { appName: string; principal?: number; repayment?: number; fees?: number; interestRate?: number; tenorDays?: number; dueDate?: string; otherCharges?: string[]; permissions?: string[] }
-export interface MsgRead { text: string; sender?: string; amountDemanded?: number; flags: { kind: string; quote: string }[] }
+export interface MsgRead { text?: string; sender?: string; amountDemanded?: number; flags: { kind: string; quote: string }[] }
 
 export const readOffer = (img: Blob, allowCloud: boolean) => hybrid<Offer>(OFFER_PROMPT, img, offerJson, offerSchema, allowCloud ? "prefer_device" : "device_only");
-export const readMessage = (img: Blob | null, text: string) => hybrid<MsgRead>(MSG_PROMPT + (text ? `\n\nmessage:\n${text}` : ""), img, msgJson, null, "device_only");
+// screenshots go in two steps: a plain transcription, then text -> json. json-constrained decoding
+// straight over an image runs past a minute on nano; each step alone takes a few seconds.
+const TRANSCRIBE = "transcribe every message in this screenshot exactly as written, with sender names and times. text only, no commentary.";
+export async function readMessage(img: Blob | null, text: string): Promise<Result<MsgRead>> {
+  if (img && !text) text = String((await hybrid<string>(TRANSCRIBE, img, null as any, null, "device_only")).data).trim();
+  const r = await hybrid<MsgRead>(MSG_PROMPT + `\n\nmessage:\n${text}`, null, msgJson, null, "device_only");
+  return { ...r, data: { ...r.data, text } };
+}
 
 /** cloud only, redacted text only. the caller must pass redact() output. */
 export async function draftComplaint(redactedFacts: string): Promise<Result<string>> {
